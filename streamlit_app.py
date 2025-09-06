@@ -1,151 +1,182 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+import base64
+import plotly.express as px
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# Set the title and favicon that appear in the Browser's tab bar.
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title="Rose Lavelle in 2022",
+    page_icon="⚽",
+    layout="wide"
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+st.title("Rose Lavelle for :blue[Seattle Reign]")
+st.write("How did she perform for the :blue-background[Seattle Reign] in 2022?")
 
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def load_data():
+    match_log = pd.read_csv("data/rose_match_data.csv")
+    profile = pd.read_csv("data/rose_player_profile.csv")
+    season_stats = pd.read_csv("data/player_season_stats.csv")
+    return match_log, profile, season_stats
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+match_log, profile, season_stats = load_data()
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+### Player Profile ##
+# --- Get Rose's info directly from the CSV
+row = profile.iloc[0]
+photo_path = "rose_lavelle_photo.png"
+name = row.get("player_short_first_name", "") + " " + row.get("player_last_name", "")
+team = "Seattle Reign"  # hardcode if not in CSV
+country = row.get("player_nationality", "Unknown")
+pos = row.get("player_position")
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+with open(photo_path, "rb") as f:
+    b64 = base64.b64encode(f.read()).decode("utf-8")
+photo_src = f"data:image/png;base64,{b64}"
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
+# Layout: make card in a narrow column
+left_col, right_col = st.columns([1, 3])  # 1/5 width for card
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+with left_col:
+    st.markdown(
+    f"""
+    <div style="
+        background: linear-gradient(180deg, #111827 0%, #0b1220 100%);
+        border-radius: 20px;
+        padding: 24px 20px;
+        box-shadow: 0 6px 25px rgba(0,0,0,0.5);
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    ">
+        <img src="{photo_src}" style="
+            width: auto;
+            height: auto;
+            border-radius: 2%;
+            border: 1px solid #fff;
+            display: block;      /* allow margin auto centering */
+            margin: 4px auto 14px auto;
+        ">
+        <p style="color:#fff; font-size:22px; font-weight:700; margin:0;">{name}</p>    
+        <p style="color:#22d3ee; margin:0 0 6px 0; font-size:16px;">
+            {team}
+        </p>
+        <p style="color:#94a3b8; font-size:13px; margin:0;">
+            {country} • {pos}
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
-''
-''
+with right_col:
+    season = season_stats.iloc[0]
+    st.header("**Season Summary**")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1: 
+        st.metric("**Appearances**", len(match_log)-1, delta="+6", border = True)
+
+        passes_diff = season.get("passes_total") - 497
+        st.metric("**Completed Passes**", season.get("passes_total"), delta = f"{passes_diff:+}", border = True)
+    with c2: 
+        st.metric("**Game Starts**", season.get("starts"), delta = "+6", border = True) 
+
+        duels_diff = season.get("duels_won") - 79
+        st.metric("**Duels Won**", season.get("duels_won"), delta = f"{duels_diff:+}", border = True)
+    with c3: 
+        minutes_diff = season.get("minutes") - 1026
+        st.metric("**Minutes Played**", season.get("minutes"), delta = f"{minutes_diff:+} minutes",border = True) 
+
+        recoveries_diff = season.get("recoveries") - 70
+        st.metric("**Recoveries**", season.get("recoveries"), delta =f"{recoveries_diff:+}", border = True)  
+    with c4: 
+        st.metric("**Goals**",season.get("goals"), delta="+4", border = True)
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+        shots_diff = season.get("shots_total") - 29
+        st.metric("**Total Shots**", season.get("shots_total"), delta = f"{shots_diff:+}", border = True)
+        
+    with c5: 
+        st.metric("**Assists**", season.get("assists"), delta=0, delta_color="off", border = True)
+        
+        targetshots_diff = season.get("shots_on_target") - 11
+        st.metric("**Shots on Target**", season.get("shots_on_target"), delta = f"{targetshots_diff:+}", border = True)
 
-st.header(f'GDP in {to_year}', divider='gray')
+st.header("Rose Lavelle's Game Precision")
+# Prepare data
+df = match_log.copy()
+df["date"] = df["match_id"].str.extract(r"(\d{4}-\d{2}-\d{2})")
+df = df.sort_values("date")
 
-''
+SHOTS_COL = "shots_total"
+SOT_COL = "shots_on_target"
 
-cols = st.columns(4)
+# Calculate shot accuracy %
+df["shot_accuracy_pct"] = np.where(
+    df[SHOTS_COL] > 0, (df[SOT_COL] / df[SHOTS_COL]) * 100, np.nan
+)
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+# Create subplots with secondary y-axis
+fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+# Bar: Total Shots
+fig.add_trace(
+    go.Bar(
+        x=df["date"],
+        y=df[SHOTS_COL],
+        name="Shots",
+        marker_color="#00429d",  # blue
+        hovertemplate="%{x|%b %d, %Y}<br>Shots: %{y}<extra></extra>",
+    ),
+    secondary_y=False,
+)
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+# Bar: Shots on Target
+fig.add_trace(
+    go.Bar(
+        x=df["date"],
+        y=df[SOT_COL],
+        name="Shots on Target",
+        marker_color="#22d3ee",  # cyan
+        hovertemplate="%{x|%b %d, %Y}<br>SOT: %{y}<extra></extra>",
+    ),
+    secondary_y=False,
+)
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+# Line: Shot Accuracy %
+fig.add_trace(
+    go.Scatter(
+        x=df["date"],
+        y=df["shot_accuracy_pct"],
+        mode="lines+markers",
+        name="Shot Accuracy %",
+        line=dict(color="#e15759", width=3),
+        marker=dict(size=8),
+        hovertemplate="%{x|%b %d, %Y}<br>Accuracy: %{y:.1f}%<extra></extra>",
+    ),
+    secondary_y=True,
+)
+
+# Layout styling
+fig.update_layout(
+    template="plotly_dark",
+    title="Shots vs Shots on Target + Accuracy %",
+
+    barmode="group",
+    height=450,
+    legend=dict(title="", orientation="h", yanchor = "bottom", y=-0.2, xanchor="center", x=0.5),
+    margin=dict(l=10, r=10, t=50, b=10),
+)
+
+# Y-axes
+fig.update_yaxes(title_text="Shots / Shots on Target", secondary_y=False)
+fig.update_yaxes(title_text="Shot Accuracy (%)", range=[0, 100], secondary_y=True)
+
+# Show chart in Streamlit
+st.plotly_chart(fig, use_container_width=True)
+    
